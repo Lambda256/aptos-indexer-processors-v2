@@ -13,9 +13,7 @@ use crate::{
         token_v2::{
             token_models::{
                 token_utils::{TokenWriteSet, V1_TOKEN_STORE_TABLE_TYPE},
-                tokens::{
-                    TableHandleToOwner, TokenV1DepositModuleEvents, TokenV1WithdrawModuleEvents,
-                },
+                tokens::{TableHandleToOwner, TokenV1AggregatedEventsMapping},
             },
             token_v2_models::{
                 v2_token_datas::TokenDataV2,
@@ -400,7 +398,7 @@ impl TokenOwnershipV2 {
                                 {
                                     Ok(nft) => nft.owner_address.clone(),
                                     Err(_) => {
-                                        tracing::error!(
+                                        tracing::warn!(
                                     transaction_version = txn_version,
                                     lookup_key = &token_address,
                                     "Failed to find current_token_ownership_v2 for burned token. You probably should backfill db."
@@ -461,7 +459,7 @@ impl TokenOwnershipV2 {
         write_set_change_index: i64,
         txn_timestamp: chrono::NaiveDateTime,
         table_handle_to_owner: &TableHandleToOwner,
-        tokens_deposited: &TokenV1DepositModuleEvents,
+        token_v1_aggregated_events: &TokenV1AggregatedEventsMapping,
     ) -> anyhow::Result<Option<(Self, Option<CurrentTokenOwnershipV2>)>> {
         let table_item_data = table_item.data.as_ref().unwrap();
 
@@ -481,24 +479,36 @@ impl TokenOwnershipV2 {
             let token_data_id_struct = token_id_struct.token_data_id;
             let token_data_id = token_data_id_struct.to_id();
 
-            let maybe_table_metadata = table_handle_to_owner.get(&table_handle);
-            let (owner_address, table_type) = if let Some(tm) = maybe_table_metadata {
-                if tm.table_type != V1_TOKEN_STORE_TABLE_TYPE {
+            // Try to get owner from table_handle_to_owner (uses v1 events). If that doesn't exist, try to get owner
+            // from token_v1_aggregated_events (uses module v2 events).
+            let owner_address = match table_handle_to_owner.get(&table_handle) {
+                Some(tm) if tm.table_type == V1_TOKEN_STORE_TABLE_TYPE => {
+                    Some(tm.get_owner_address())
+                },
+                _ => token_v1_aggregated_events
+                    .get(&token_data_id)
+                    .and_then(|events| events.deposit_module_events.as_slice().last())
+                    .and_then(|e| e.to_address.clone()),
+            };
+
+            let owner_address = match owner_address {
+                Some(addr) => addr,
+                None => {
+                    // For token v1 offers, the token is withdrawn from the owner's account and moved
+                    // into another table item. The token appears as unowned in current_token_ownerships
+                    // but it will show up in the current_token_pending_claims table.
+                    tracing::warn!(
+                        transaction_version = txn_version,
+                        table_handle = table_handle,
+                        token_data_id = token_data_id,
+                        "Missing table handle metadata and deposit module event for token. \
+                            table_handle_to_owner: {:?}, \
+                            token_v1_aggregated_events: {:?}",
+                        table_handle_to_owner,
+                        token_v1_aggregated_events,
+                    );
                     return Ok(None);
-                }
-                let owner_address = tm.get_owner_address();
-                (owner_address, Some(tm.table_type.clone()))
-            } else {
-                // If table_handle_to_owner doesn’t have the table metadata, it might be because
-                // that module events were emitted, which means the resource won’t appear in the transaction.
-                // Try getting the token metadata from the deposit module event instead.
-                let maybe_token_metadata = tokens_deposited.get(&token_data_id);
-                let owner_address = if let Some(token_metadata) = maybe_token_metadata {
-                    token_metadata.to_address.clone().unwrap()
-                } else {
-                    return Ok(None);
-                };
-                (owner_address, Some(V1_TOKEN_STORE_TABLE_TYPE.to_string()))
+                },
             };
 
             Ok(Some((
@@ -510,7 +520,7 @@ impl TokenOwnershipV2 {
                     owner_address: Some(owner_address.clone()),
                     storage_id: table_handle.clone(),
                     amount: amount.clone(),
-                    table_type_v1: table_type.clone(),
+                    table_type_v1: Some(V1_TOKEN_STORE_TABLE_TYPE.to_string()),
                     token_properties_mutated_v1: Some(token.token_properties.clone()),
                     is_soulbound_v2: None,
                     token_standard: TokenStandard::V1.to_string(),
@@ -524,7 +534,7 @@ impl TokenOwnershipV2 {
                     owner_address,
                     storage_id: table_handle,
                     amount,
-                    table_type_v1: table_type,
+                    table_type_v1: Some(V1_TOKEN_STORE_TABLE_TYPE.to_string()),
                     token_properties_mutated_v1: Some(token.token_properties),
                     is_soulbound_v2: None,
                     token_standard: TokenStandard::V1.to_string(),
@@ -546,7 +556,7 @@ impl TokenOwnershipV2 {
         write_set_change_index: i64,
         txn_timestamp: chrono::NaiveDateTime,
         table_handle_to_owner: &TableHandleToOwner,
-        tokens_withdrawn: &TokenV1WithdrawModuleEvents,
+        token_v1_aggregated_events: &TokenV1AggregatedEventsMapping,
     ) -> anyhow::Result<Option<(Self, Option<CurrentTokenOwnershipV2>)>> {
         let table_item_data = table_item.data.as_ref().unwrap();
 
@@ -564,21 +574,32 @@ impl TokenOwnershipV2 {
             let token_data_id_struct = token_id_struct.token_data_id;
             let token_data_id = token_data_id_struct.to_id();
 
-            let maybe_table_metadata = table_handle_to_owner.get(&table_handle);
-            let (owner_address, table_type) = if let Some(tm) = maybe_table_metadata {
-                if tm.table_type != V1_TOKEN_STORE_TABLE_TYPE {
+            // Try to get owner from table_handle_to_owner (uses v1 events). If that doesn't exist, try to get owner
+            // from token_v1_aggregated_events (uses module v2 events).
+            let owner_address = match table_handle_to_owner.get(&table_handle) {
+                Some(tm) if tm.table_type == V1_TOKEN_STORE_TABLE_TYPE => {
+                    Some(tm.get_owner_address())
+                },
+                _ => token_v1_aggregated_events
+                    .get(&token_data_id)
+                    .and_then(|events| events.withdraw_module_events.as_slice().first())
+                    .and_then(|e| e.from_address.clone()),
+            };
+            let owner_address = match owner_address {
+                Some(addr) => addr,
+                None => {
+                    tracing::warn!(
+                        transaction_version = txn_version,
+                        table_handle = table_handle,
+                        token_data_id = token_data_id,
+                        "Missing table handle metadata and withdraw module event for token. \
+                            table_handle_to_owner: {:?}, \
+                            token_v1_aggregated_events: {:?}",
+                        table_handle_to_owner,
+                        token_v1_aggregated_events,
+                    );
                     return Ok(None);
-                }
-                let owner_address = tm.get_owner_address();
-                (owner_address, Some(tm.table_type.clone()))
-            } else {
-                let maybe_token_metadata = tokens_withdrawn.get(&token_data_id);
-                let owner_address = if let Some(token_metadata) = maybe_token_metadata {
-                    token_metadata.from_address.clone().unwrap()
-                } else {
-                    return Ok(None);
-                };
-                (owner_address, Some(V1_TOKEN_STORE_TABLE_TYPE.to_string()))
+                },
             };
 
             Ok(Some((
@@ -590,7 +611,7 @@ impl TokenOwnershipV2 {
                     owner_address: Some(owner_address.clone()),
                     storage_id: table_handle.clone(),
                     amount: BigDecimal::zero(),
-                    table_type_v1: table_type.clone(),
+                    table_type_v1: Some(V1_TOKEN_STORE_TABLE_TYPE.to_string()),
                     token_properties_mutated_v1: None,
                     is_soulbound_v2: None,
                     token_standard: TokenStandard::V1.to_string(),
@@ -604,7 +625,7 @@ impl TokenOwnershipV2 {
                     owner_address,
                     storage_id: table_handle,
                     amount: BigDecimal::zero(),
-                    table_type_v1: table_type,
+                    table_type_v1: Some(V1_TOKEN_STORE_TABLE_TYPE.to_string()),
                     token_properties_mutated_v1: None,
                     is_soulbound_v2: None,
                     token_standard: TokenStandard::V1.to_string(),
