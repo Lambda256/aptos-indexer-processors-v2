@@ -12,7 +12,7 @@ use super::{
     v2_fungible_asset_to_coin_mappings::{FungibleAssetToCoinMapping, FungibleAssetToCoinMappings},
 };
 use crate::{
-    db::resources::FromWriteResource,
+    db::resources::{FromWriteResource, BURN_ADDR},
     parquet_processors::parquet_utils::util::{HasVersion, NamedTable},
     processors::{
         default::models::move_resources::MoveResource,
@@ -23,7 +23,7 @@ use crate::{
                 v2_fungible_asset_utils::FungibleAssetStore,
             },
         },
-        objects::v2_object_utils::ObjectAggregatedDataMapping,
+        objects::v2_object_utils::{ObjectAggregatedDataMapping, ObjectCore},
         token_v2::token_v2_models::v2_token_utils::TokenStandard,
     },
     schema::{
@@ -205,13 +205,18 @@ impl FungibleAssetBalance {
         txn_version: i64,
         txn_timestamp: chrono::NaiveDateTime,
         object_metadatas: &ObjectAggregatedDataMapping,
+        store_address_to_deleted_fa_store_events: &StoreAddressToDeletedFungibleAssetStoreEvent,
     ) -> anyhow::Result<Option<Self>> {
         if let Some(inner) = &FungibleAssetStore::from_write_resource(write_resource)? {
             let storage_id = standardize_address(write_resource.address.as_str());
+
             // Need to get the object of the store
             if let Some(object_data) = object_metadatas.get(&storage_id) {
-                let object = &object_data.object.object_core;
-                let owner_address = object.get_owner_address();
+                let owner_address = object_data
+                    .get_owner_address()
+                    // If there is no ObjectCore resource, then this FA store is defacto ownerless, so
+                    // set the owner to the burn address.
+                    .unwrap_or(String::from(BURN_ADDR));
                 let asset_type = inner.metadata.get_reference_address();
                 let is_primary = Self::is_primary(&owner_address, &asset_type, &storage_id);
 
@@ -238,6 +243,29 @@ impl FungibleAssetBalance {
                     token_standard: TokenStandard::V2.to_string(),
                 };
                 return Ok(Some(coin_balance));
+            }
+        } else if let Some(inner) = &ObjectCore::from_write_resource(write_resource)? {
+            // Need to handle the case where the object / resource group still exists, but the fungible store is deleted
+            // We handle this here because even though the store is deleted, its resource group would still be emitted
+            // as a write resource in the transaction
+            let storage_id = standardize_address(write_resource.address.as_str());
+            if let Some(deleted_fa_store_event) =
+                store_address_to_deleted_fa_store_events.get(&storage_id)
+            {
+                let asset_type = standardize_address(deleted_fa_store_event.metadata.as_str());
+                let balance = Self {
+                    transaction_version: txn_version,
+                    write_set_change_index,
+                    storage_id: storage_id.clone(),
+                    owner_address: inner.get_owner_address(),
+                    asset_type: asset_type.clone(),
+                    is_primary: false, // Deleted stores can only be secondary
+                    is_frozen: false,
+                    amount: BigDecimal::zero(),
+                    transaction_timestamp: txn_timestamp,
+                    token_standard: TokenStandard::V2.to_string(),
+                };
+                return Ok(Some(balance));
             }
         }
 
