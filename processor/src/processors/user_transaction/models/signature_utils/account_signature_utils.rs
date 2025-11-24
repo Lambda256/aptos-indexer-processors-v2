@@ -10,7 +10,7 @@ use crate::processors::user_transaction::models::signatures::Signature;
 use aptos_indexer_processor_sdk::{
     aptos_protos::transaction::v1::{
         account_signature::{Signature as AccountSignatureEnum, Type as AccountSignatureTypeEnum},
-        AccountSignature, MultiKeySignature, SingleKeySignature,
+        AbstractionSignature, AccountSignature, MultiKeySignature, SingleKeySignature,
     },
     utils::convert::standardize_address,
 };
@@ -104,8 +104,9 @@ pub fn from_account_signature(
             override_address,
             block_timestamp,
         ),
-        AccountSignatureEnum::Abstraction(_sig) => {
+        AccountSignatureEnum::Abstraction(sig) => {
             vec![parse_abstraction_signature(
+                sig,
                 &account_signature_type,
                 sender,
                 transaction_version,
@@ -151,6 +152,7 @@ pub fn parse_single_key_signature(
         ),
         threshold: 1,
         public_key_indices: serde_json::Value::Array(vec![]),
+        function_info: None,
         signature: format!("0x{}", hex::encode(signature_bytes.as_slice())),
         multi_agent_index,
         multi_sig_index: 0,
@@ -192,6 +194,7 @@ pub fn parse_multi_key_signature(
             public_key_type: Some(any_public_key_type),
             public_key: format!("0x{}", hex::encode(public_key)),
             threshold: s.signatures_required as i64,
+            function_info: None,
             signature: format!("0x{}", hex::encode(signature_bytes.as_slice())),
             public_key_indices: serde_json::Value::Array(
                 public_key_indices
@@ -211,6 +214,7 @@ pub fn get_public_key_indices_from_multi_key_signature(s: &MultiKeySignature) ->
 }
 
 pub fn parse_abstraction_signature(
+    s: &AbstractionSignature,
     account_signature_type: &str,
     sender: &String,
     transaction_version: i64,
@@ -230,10 +234,11 @@ pub fn parse_abstraction_signature(
         account_signature_type: account_signature_type.to_string(),
         any_signature_type: None,
         public_key_type: None,
-        public_key: "Not implemented".into(),
+        public_key: "Not applicable".into(),
         threshold: 1,
         public_key_indices: serde_json::Value::Array(vec![]),
-        signature: "Not implemented".into(),
+        function_info: Some(s.function_info.clone()),
+        signature: format!("0x{}", hex::encode(s.signature.as_slice())),
         multi_agent_index,
         multi_sig_index: 0,
     }
