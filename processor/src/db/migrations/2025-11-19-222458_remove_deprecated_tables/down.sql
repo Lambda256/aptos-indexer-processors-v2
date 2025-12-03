@@ -2,45 +2,45 @@
 -- Recreate the deprecated tables and views
 
 -- Recreate transactions table
-CREATE TABLE transactions (
-  version BIGINT UNIQUE PRIMARY KEY NOT NULL,
-  block_height BIGINT NOT NULL,
-  hash VARCHAR(66) UNIQUE NOT NULL,
-  type VARCHAR NOT NULL,
-  payload jsonb,
-  state_change_hash VARCHAR(66) NOT NULL,
-  event_root_hash VARCHAR(66) NOT NULL,
-  state_checkpoint_hash VARCHAR(66),
-  gas_used NUMERIC NOT NULL,
-  success BOOLEAN NOT NULL,
-  vm_status TEXT NOT NULL,
-  accumulator_root_hash VARCHAR(66) NOT NULL,
-  num_events BIGINT NOT NULL,
-  num_write_set_changes BIGINT NOT NULL,
-  inserted_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  epoch BIGINT NOT NULL,
-  payload_type VARCHAR(50)
-);
-CREATE INDEX txn_insat_index ON transactions (inserted_at);
-CREATE INDEX txn_epoch_index ON transactions (epoch);
+-- CREATE TABLE transactions (
+--   version BIGINT UNIQUE PRIMARY KEY NOT NULL,
+--   block_height BIGINT NOT NULL,
+--   hash VARCHAR(66) UNIQUE NOT NULL,
+--   type VARCHAR NOT NULL,
+--   payload jsonb,
+--   state_change_hash VARCHAR(66) NOT NULL,
+--   event_root_hash VARCHAR(66) NOT NULL,
+--   state_checkpoint_hash VARCHAR(66),
+--   gas_used NUMERIC NOT NULL,
+--   success BOOLEAN NOT NULL,
+--   vm_status TEXT NOT NULL,
+--   accumulator_root_hash VARCHAR(66) NOT NULL,
+--   num_events BIGINT NOT NULL,
+--   num_write_set_changes BIGINT NOT NULL,
+--   inserted_at TIMESTAMP NOT NULL DEFAULT NOW(),
+--   epoch BIGINT NOT NULL,
+--   payload_type VARCHAR(50)
+-- );
+-- CREATE INDEX txn_insat_index ON transactions (inserted_at);
+-- CREATE INDEX txn_epoch_index ON transactions (epoch);
 
 -- Recreate events table
-CREATE TABLE events (
-  sequence_number BIGINT NOT NULL,
-  creation_number BIGINT NOT NULL,
-  account_address VARCHAR(66) NOT NULL,
-  transaction_version BIGINT NOT NULL,
-  transaction_block_height BIGINT NOT NULL,
-  type TEXT NOT NULL,
-  data jsonb NOT NULL,
-  inserted_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  event_index BIGINT NOT NULL,
-  indexed_type VARCHAR(300) NOT NULL,
-  PRIMARY KEY (transaction_version, event_index)
-);
-CREATE INDEX ev_addr_type_index ON events (account_address);
-CREATE INDEX ev_insat_index ON events (inserted_at);
-CREATE INDEX ev_itype_index ON events (indexed_type);
+-- CREATE TABLE events (
+--   sequence_number BIGINT NOT NULL,
+--   creation_number BIGINT NOT NULL,
+--   account_address VARCHAR(66) NOT NULL,
+--   transaction_version BIGINT NOT NULL,
+--   transaction_block_height BIGINT NOT NULL,
+--   type TEXT NOT NULL,
+--   data jsonb NOT NULL,
+--   inserted_at TIMESTAMP NOT NULL DEFAULT NOW(),
+--   event_index BIGINT NOT NULL,
+--   indexed_type VARCHAR(300) NOT NULL,
+--   PRIMARY KEY (transaction_version, event_index)
+-- );
+-- CREATE INDEX ev_addr_type_index ON events (account_address);
+-- CREATE INDEX ev_insat_index ON events (inserted_at);
+-- CREATE INDEX ev_itype_index ON events (indexed_type);
 
 -- Recreate move_resources table
 CREATE TABLE move_resources (
@@ -405,16 +405,16 @@ CREATE INDEX ans_insat_index ON current_ans_lookup (inserted_at);
 CREATE INDEX ans_tn_index ON current_ans_lookup (token_name);
 
 -- Recreate views
-CREATE VIEW events_view AS
-SELECT sequence_number,
-  creation_number,
-  account_address,
-  transaction_version,
-  transaction_block_height,
-  "type",
-  "data"#>>'{}' AS json_data,
-  inserted_at
-FROM events;
+-- CREATE VIEW events_view AS
+-- SELECT sequence_number,
+--   creation_number,
+--   account_address,
+--   transaction_version,
+--   transaction_block_height,
+--   "type",
+--   "data"#>>'{}' AS json_data,
+--   inserted_at
+-- FROM events;
 
 CREATE VIEW move_resources_view AS
 SELECT transaction_version,
@@ -430,30 +430,30 @@ SELECT transaction_version,
   inserted_at
 FROM move_resources;
 
-CREATE VIEW transactions_view AS
-SELECT "version",
-  block_height,
-  "hash",
-  "type",
-  payload#>>'{}' AS json_payload,
-  state_change_hash,
-  event_root_hash,
-  state_checkpoint_hash,
-  gas_used,
-  success,
-  vm_status,
-  accumulator_root_hash,
-  num_events,
-  num_write_set_changes,
-  inserted_at
-FROM transactions;
+-- CREATE VIEW transactions_view AS
+-- SELECT "version",
+--   block_height,
+--   "hash",
+--   "type",
+--   payload#>>'{}' AS json_payload,
+--   state_change_hash,
+--   event_root_hash,
+--   state_checkpoint_hash,
+--   gas_used,
+--   success,
+--   vm_status,
+--   accumulator_root_hash,
+--   num_events,
+--   num_write_set_changes,
+--   inserted_at
+-- FROM transactions;
 
-CREATE OR REPLACE VIEW address_version_from_events AS
-SELECT account_address,
-  transaction_version
-FROM events
-GROUP BY 1,
-  2;
+-- CREATE OR REPLACE VIEW address_version_from_events AS
+-- SELECT account_address,
+--   transaction_version
+-- FROM events
+-- GROUP BY 1,
+--   2;
 
 CREATE OR REPLACE VIEW address_version_from_move_resources AS
 SELECT address,
@@ -462,12 +462,12 @@ FROM move_resources
 GROUP BY 1,
   2;
 
-CREATE OR REPLACE VIEW address_events_summary AS
-SELECT account_address,
-  min(transaction_block_height) AS min_block_height,
-  count(DISTINCT transaction_version) AS num_distinct_versions
-FROM events
-GROUP BY 1;
+-- CREATE OR REPLACE VIEW address_events_summary AS
+-- SELECT account_address,
+--   min(transaction_block_height) AS min_block_height,
+--   count(DISTINCT transaction_version) AS num_distinct_versions
+-- FROM events
+-- GROUP BY 1;
 
 CREATE OR REPLACE VIEW current_collection_ownership_view AS
 SELECT owner_address,

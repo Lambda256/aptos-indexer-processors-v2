@@ -4,18 +4,18 @@ DROP SCHEMA IF EXISTS legacy_migration_v1 CASCADE;
 -- Drop deprecated views first (they may depend on tables)
 DROP VIEW IF EXISTS current_collection_ownership_view;
 DROP VIEW IF EXISTS address_version_from_move_resources;
-DROP VIEW IF EXISTS address_events_summary;
-DROP VIEW IF EXISTS address_version_from_events;
-DROP VIEW IF EXISTS events_view;
+-- DROP VIEW IF EXISTS address_events_summary;
+-- DROP VIEW IF EXISTS address_version_from_events;
+-- DROP VIEW IF EXISTS events_view;
 DROP VIEW IF EXISTS move_resources_view;
-DROP VIEW IF EXISTS transactions_view;
+-- DROP VIEW IF EXISTS transactions_view;
 
 -- Drop tables with foreign keys to transactions first
-DROP TABLE IF EXISTS events;
+-- DROP TABLE IF EXISTS events;
 DROP TABLE IF EXISTS move_resources;
 
 -- Drop transactions table (was referenced by foreign keys)
-DROP TABLE IF EXISTS transactions;
+-- DROP TABLE IF EXISTS transactions;
 
 -- Drop remaining deprecated tables (no foreign key dependencies)
 DROP TABLE IF EXISTS coin_activities;

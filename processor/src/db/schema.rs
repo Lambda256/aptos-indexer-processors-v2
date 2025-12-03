@@ -506,6 +506,24 @@ diesel::table! {
 }
 
 diesel::table! {
+    events (transaction_version, event_index) {
+        sequence_number -> Int8,
+        creation_number -> Int8,
+        #[max_length = 66]
+        account_address -> Varchar,
+        transaction_version -> Int8,
+        transaction_block_height -> Int8,
+        #[sql_name = "type"]
+        type_ -> Text,
+        data -> Jsonb,
+        inserted_at -> Timestamp,
+        event_index -> Int8,
+        #[max_length = 300]
+        indexed_type -> Varchar,
+    }
+}
+
+diesel::table! {
     fungible_asset_activities (transaction_version, event_index) {
         transaction_version -> Int8,
         event_index -> Int8,
@@ -861,6 +879,35 @@ diesel::table! {
 }
 
 diesel::table! {
+    transactions (version) {
+        version -> Int8,
+        block_height -> Int8,
+        #[max_length = 66]
+        hash -> Varchar,
+        #[sql_name = "type"]
+        type_ -> Varchar,
+        payload -> Nullable<Jsonb>,
+        #[max_length = 66]
+        state_change_hash -> Varchar,
+        #[max_length = 66]
+        event_root_hash -> Varchar,
+        #[max_length = 66]
+        state_checkpoint_hash -> Nullable<Varchar>,
+        gas_used -> Numeric,
+        success -> Bool,
+        vm_status -> Text,
+        #[max_length = 66]
+        accumulator_root_hash -> Varchar,
+        num_events -> Int8,
+        num_write_set_changes -> Int8,
+        inserted_at -> Timestamp,
+        epoch -> Int8,
+        #[max_length = 50]
+        payload_type -> Nullable<Varchar>,
+    }
+}
+
+diesel::table! {
     user_transactions (version) {
         version -> Int8,
         block_height -> Int8,
@@ -941,6 +988,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     delegated_staking_pools,
     delegator_balances,
     event_size_info,
+    events,
     fungible_asset_activities,
     fungible_asset_balances,
     fungible_asset_metadata,
@@ -962,6 +1010,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     token_datas_v2,
     token_ownerships_v2,
     transaction_size_info,
+    transactions,
     user_transactions,
     write_set_changes,
     write_set_size_info,
