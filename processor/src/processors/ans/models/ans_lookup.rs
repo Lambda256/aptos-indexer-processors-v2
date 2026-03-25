@@ -6,13 +6,10 @@
 #![allow(clippy::unused_unit)]
 
 use super::ans_utils::AnsTableItem;
-use crate::schema::{ans_lookup, ans_primary_name, current_ans_lookup, current_ans_primary_name};
 use aptos_indexer_processor_sdk::{
     aptos_protos::transaction::v1::{DeleteTableItem, WriteTableItem},
     utils::{convert::standardize_address, extract::get_name_from_unnested_move_type},
 };
-use diesel::prelude::*;
-use field_count::FieldCount;
 use serde::{Deserialize, Serialize};
 
 type Domain = String;
@@ -22,21 +19,9 @@ type CurrentAnsLookupPK = (Domain, Subdomain);
 // PK of current_ans_primary_name, i.e. registered_address
 type CurrentAnsPrimaryNamePK = String;
 
-#[derive(
-    Clone,
-    Default,
-    Debug,
-    Deserialize,
-    FieldCount,
-    Identifiable,
-    Insertable,
-    Serialize,
-    PartialEq,
-    Eq,
-)]
-#[diesel(primary_key(domain, subdomain))]
-#[diesel(table_name = current_ans_lookup)]
-#[diesel(treat_none_as_null = true)]
+// This was previously a model for an ANS v1 table, but that table has been deprecated.
+// However, the struct is still used for parsing ANS v1 data before v2 was introduced.
+#[derive(Clone, Default, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct CurrentAnsLookup {
     pub domain: String,
     pub subdomain: String,
@@ -48,10 +33,8 @@ pub struct CurrentAnsLookup {
 }
 
 // TODO: This has to be deprecated, but currently there is a usage in ans_lookup_v2 model file which is not yet deprecated.
-#[derive(Clone, Default, Debug, Deserialize, FieldCount, Identifiable, Insertable, Serialize)]
-#[diesel(primary_key(transaction_version, write_set_change_index))]
-#[diesel(table_name = ans_lookup)]
-#[diesel(treat_none_as_null = true)]
+// Note: These structs are used only for parsing v1 data and converting to v2. The v1 tables have been dropped.
+#[derive(Clone, Default, Debug, Deserialize, Serialize)]
 pub struct AnsLookup {
     pub transaction_version: i64,
     pub write_set_change_index: i64,
@@ -63,21 +46,9 @@ pub struct AnsLookup {
     pub is_deleted: bool,
 }
 
-#[derive(
-    Clone,
-    Default,
-    Debug,
-    Deserialize,
-    FieldCount,
-    Identifiable,
-    Insertable,
-    Serialize,
-    PartialEq,
-    Eq,
-)]
-#[diesel(primary_key(registered_address, token_name))]
-#[diesel(table_name = current_ans_primary_name)]
-#[diesel(treat_none_as_null = true)]
+// TODO: This has to be deprecated, but currently there is a usage in ans_primary_name_v2 model file which is not yet deprecated.
+// Note: These structs are used only for parsing v1 data and converting to v2. The v1 tables have been dropped.
+#[derive(Clone, Default, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct CurrentAnsPrimaryName {
     pub registered_address: String,
     pub domain: Option<String>,
@@ -87,10 +58,9 @@ pub struct CurrentAnsPrimaryName {
     pub last_transaction_version: i64,
 }
 
-#[derive(Clone, Default, Debug, Deserialize, FieldCount, Identifiable, Insertable, Serialize)]
-#[diesel(primary_key(transaction_version, write_set_change_index, domain, subdomain))]
-#[diesel(table_name = ans_primary_name)]
-#[diesel(treat_none_as_null = true)]
+// TODO: This has to be deprecated, but currently there is a usage in ans_primary_name_v2 model file which is not yet deprecated.
+// Note: These structs are used only for parsing v1 data and converting to v2. The v1 tables have been dropped.
+#[derive(Clone, Default, Debug, Deserialize, Serialize)]
 pub struct AnsPrimaryName {
     pub transaction_version: i64,
     pub write_set_change_index: i64,
@@ -130,41 +100,41 @@ impl CurrentAnsLookup {
         write_set_change_index: i64,
     ) -> anyhow::Result<Option<(Self, AnsLookup)>> {
         let table_handle = standardize_address(&write_table_item.handle.to_string());
-        if table_handle == standardize_address(ans_v1_name_records_table_handle) {
-            if let Some(data) = write_table_item.data.as_ref() {
-                // Get the name only, e.g. 0x1::domain::Name. This will return Name
-                let key_type_name = get_name_from_unnested_move_type(data.key_type.as_ref());
+        if table_handle == standardize_address(ans_v1_name_records_table_handle)
+            && let Some(data) = write_table_item.data.as_ref()
+        {
+            // Get the name only, e.g. 0x1::domain::Name. This will return Name
+            let key_type_name = get_name_from_unnested_move_type(data.key_type.as_ref());
 
-                if let Some(AnsTableItem::NameRecordKeyV1(name_record_key)) =
-                    &AnsTableItem::from_table_item(key_type_name, &data.key, txn_version)?
+            if let Some(AnsTableItem::NameRecordKeyV1(name_record_key)) =
+                &AnsTableItem::from_table_item(key_type_name, &data.key, txn_version)?
+            {
+                let value_type_name: &str =
+                    get_name_from_unnested_move_type(data.value_type.as_ref());
+                if let Some(AnsTableItem::NameRecordV1(name_record)) =
+                    &AnsTableItem::from_table_item(value_type_name, &data.value, txn_version)?
                 {
-                    let value_type_name: &str =
-                        get_name_from_unnested_move_type(data.value_type.as_ref());
-                    if let Some(AnsTableItem::NameRecordV1(name_record)) =
-                        &AnsTableItem::from_table_item(value_type_name, &data.value, txn_version)?
-                    {
-                        return Ok(Some((
-                            Self {
-                                domain: name_record_key.get_domain_trunc(),
-                                subdomain: name_record_key.get_subdomain_trunc(),
-                                registered_address: name_record.get_target_address(),
-                                expiration_timestamp: name_record.get_expiration_time(),
-                                token_name: name_record_key.get_token_name(),
-                                last_transaction_version: txn_version,
-                                is_deleted: false,
-                            },
-                            AnsLookup {
-                                transaction_version: txn_version,
-                                write_set_change_index,
-                                domain: name_record_key.get_domain_trunc(),
-                                subdomain: name_record_key.get_subdomain_trunc(),
-                                registered_address: name_record.get_target_address(),
-                                expiration_timestamp: name_record.get_expiration_time(),
-                                token_name: name_record_key.get_token_name(),
-                                is_deleted: false,
-                            },
-                        )));
-                    }
+                    return Ok(Some((
+                        Self {
+                            domain: name_record_key.get_domain_trunc(),
+                            subdomain: name_record_key.get_subdomain_trunc(),
+                            registered_address: name_record.get_target_address(),
+                            expiration_timestamp: name_record.get_expiration_time(),
+                            token_name: name_record_key.get_token_name(),
+                            last_transaction_version: txn_version,
+                            is_deleted: false,
+                        },
+                        AnsLookup {
+                            transaction_version: txn_version,
+                            write_set_change_index,
+                            domain: name_record_key.get_domain_trunc(),
+                            subdomain: name_record_key.get_subdomain_trunc(),
+                            registered_address: name_record.get_target_address(),
+                            expiration_timestamp: name_record.get_expiration_time(),
+                            token_name: name_record_key.get_token_name(),
+                            is_deleted: false,
+                        },
+                    )));
                 }
             }
         }
@@ -181,35 +151,35 @@ impl CurrentAnsLookup {
         write_set_change_index: i64,
     ) -> anyhow::Result<Option<(Self, AnsLookup)>> {
         let table_handle = standardize_address(&delete_table_item.handle.to_string());
-        if table_handle == standardize_address(ans_v1_name_records_table_handle) {
-            if let Some(data) = delete_table_item.data.as_ref() {
-                let key_type_name = get_name_from_unnested_move_type(data.key_type.as_ref());
+        if table_handle == standardize_address(ans_v1_name_records_table_handle)
+            && let Some(data) = delete_table_item.data.as_ref()
+        {
+            let key_type_name = get_name_from_unnested_move_type(data.key_type.as_ref());
 
-                if let Some(AnsTableItem::NameRecordKeyV1(name_record_key)) =
-                    &AnsTableItem::from_table_item(key_type_name, &data.key, txn_version)?
-                {
-                    return Ok(Some((
-                        Self {
-                            domain: name_record_key.get_domain_trunc(),
-                            subdomain: name_record_key.get_subdomain_trunc(),
-                            registered_address: None,
-                            expiration_timestamp: chrono::NaiveDateTime::default(),
-                            token_name: name_record_key.get_token_name(),
-                            last_transaction_version: txn_version,
-                            is_deleted: true,
-                        },
-                        AnsLookup {
-                            transaction_version: txn_version,
-                            write_set_change_index,
-                            domain: name_record_key.get_domain_trunc(),
-                            subdomain: name_record_key.get_subdomain_trunc(),
-                            registered_address: None,
-                            expiration_timestamp: chrono::NaiveDateTime::default(),
-                            token_name: name_record_key.get_token_name(),
-                            is_deleted: true,
-                        },
-                    )));
-                }
+            if let Some(AnsTableItem::NameRecordKeyV1(name_record_key)) =
+                &AnsTableItem::from_table_item(key_type_name, &data.key, txn_version)?
+            {
+                return Ok(Some((
+                    Self {
+                        domain: name_record_key.get_domain_trunc(),
+                        subdomain: name_record_key.get_subdomain_trunc(),
+                        registered_address: None,
+                        expiration_timestamp: chrono::NaiveDateTime::default(),
+                        token_name: name_record_key.get_token_name(),
+                        last_transaction_version: txn_version,
+                        is_deleted: true,
+                    },
+                    AnsLookup {
+                        transaction_version: txn_version,
+                        write_set_change_index,
+                        domain: name_record_key.get_domain_trunc(),
+                        subdomain: name_record_key.get_subdomain_trunc(),
+                        registered_address: None,
+                        expiration_timestamp: chrono::NaiveDateTime::default(),
+                        token_name: name_record_key.get_token_name(),
+                        is_deleted: true,
+                    },
+                )));
             }
         }
         Ok(None)
@@ -243,39 +213,39 @@ impl CurrentAnsPrimaryName {
         write_set_change_index: i64,
     ) -> anyhow::Result<Option<(Self, AnsPrimaryName)>> {
         let table_handle = standardize_address(&write_table_item.handle.to_string());
-        if table_handle == standardize_address(ans_v1_primary_names_table_handle) {
-            if let Some(data) = write_table_item.data.as_ref() {
-                // Return early if key is not address type. This should not be possible but just a precaution
-                // in case we input the wrong table handle
-                if data.key_type != "address" {
-                    return Ok(None);
-                }
-                let decoded_key: String = serde_json::from_str(data.key.as_str()).unwrap();
-                let registered_address = standardize_address(decoded_key.as_str());
-                let value_type_name = get_name_from_unnested_move_type(data.value_type.as_ref());
-                if let Some(AnsTableItem::NameRecordKeyV1(name_record_key)) =
-                    &AnsTableItem::from_table_item(value_type_name, &data.value, txn_version)?
-                {
-                    return Ok(Some((
-                        Self {
-                            registered_address: registered_address.clone(),
-                            domain: Some(name_record_key.get_domain_trunc()),
-                            subdomain: Some(name_record_key.get_subdomain_trunc()),
-                            token_name: Some(name_record_key.get_token_name()),
-                            last_transaction_version: txn_version,
-                            is_deleted: false,
-                        },
-                        AnsPrimaryName {
-                            transaction_version: txn_version,
-                            write_set_change_index,
-                            registered_address,
-                            domain: Some(name_record_key.get_domain_trunc()),
-                            subdomain: Some(name_record_key.get_subdomain_trunc()),
-                            token_name: Some(name_record_key.get_token_name()),
-                            is_deleted: false,
-                        },
-                    )));
-                }
+        if table_handle == standardize_address(ans_v1_primary_names_table_handle)
+            && let Some(data) = write_table_item.data.as_ref()
+        {
+            // Return early if key is not address type. This should not be possible but just a precaution
+            // in case we input the wrong table handle
+            if data.key_type != "address" {
+                return Ok(None);
+            }
+            let decoded_key: String = serde_json::from_str(data.key.as_str()).unwrap();
+            let registered_address = standardize_address(decoded_key.as_str());
+            let value_type_name = get_name_from_unnested_move_type(data.value_type.as_ref());
+            if let Some(AnsTableItem::NameRecordKeyV1(name_record_key)) =
+                &AnsTableItem::from_table_item(value_type_name, &data.value, txn_version)?
+            {
+                return Ok(Some((
+                    Self {
+                        registered_address: registered_address.clone(),
+                        domain: Some(name_record_key.get_domain_trunc()),
+                        subdomain: Some(name_record_key.get_subdomain_trunc()),
+                        token_name: Some(name_record_key.get_token_name()),
+                        last_transaction_version: txn_version,
+                        is_deleted: false,
+                    },
+                    AnsPrimaryName {
+                        transaction_version: txn_version,
+                        write_set_change_index,
+                        registered_address,
+                        domain: Some(name_record_key.get_domain_trunc()),
+                        subdomain: Some(name_record_key.get_subdomain_trunc()),
+                        token_name: Some(name_record_key.get_token_name()),
+                        is_deleted: false,
+                    },
+                )));
             }
         }
         Ok(None)
@@ -290,35 +260,35 @@ impl CurrentAnsPrimaryName {
         write_set_change_index: i64,
     ) -> anyhow::Result<Option<(Self, AnsPrimaryName)>> {
         let table_handle = standardize_address(&delete_table_item.handle.to_string());
-        if table_handle == standardize_address(ans_v1_primary_names_table_handle) {
-            if let Some(data) = delete_table_item.data.as_ref() {
-                // Return early if key is not address type. This should not be possible but just a precaution
-                // in case we input the wrong table handle
-                if data.key_type != "address" {
-                    return Ok(None);
-                }
-                let decoded_key: String = serde_json::from_str(data.key.as_str()).unwrap();
-                let registered_address = standardize_address(decoded_key.as_str());
-                return Ok(Some((
-                    Self {
-                        registered_address: registered_address.clone(),
-                        domain: None,
-                        subdomain: None,
-                        token_name: None,
-                        last_transaction_version: txn_version,
-                        is_deleted: true,
-                    },
-                    AnsPrimaryName {
-                        transaction_version: txn_version,
-                        write_set_change_index,
-                        registered_address,
-                        domain: None,
-                        subdomain: None,
-                        token_name: None,
-                        is_deleted: true,
-                    },
-                )));
+        if table_handle == standardize_address(ans_v1_primary_names_table_handle)
+            && let Some(data) = delete_table_item.data.as_ref()
+        {
+            // Return early if key is not address type. This should not be possible but just a precaution
+            // in case we input the wrong table handle
+            if data.key_type != "address" {
+                return Ok(None);
             }
+            let decoded_key: String = serde_json::from_str(data.key.as_str()).unwrap();
+            let registered_address = standardize_address(decoded_key.as_str());
+            return Ok(Some((
+                Self {
+                    registered_address: registered_address.clone(),
+                    domain: None,
+                    subdomain: None,
+                    token_name: None,
+                    last_transaction_version: txn_version,
+                    is_deleted: true,
+                },
+                AnsPrimaryName {
+                    transaction_version: txn_version,
+                    write_set_change_index,
+                    registered_address,
+                    domain: None,
+                    subdomain: None,
+                    token_name: None,
+                    is_deleted: true,
+                },
+            )));
         }
         Ok(None)
     }

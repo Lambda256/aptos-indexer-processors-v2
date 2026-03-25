@@ -13,8 +13,8 @@ use crate::{
 use allocative_derive::Allocative;
 use aptos_indexer_processor_sdk::{
     aptos_protos::transaction::v1::{
-        transaction::{TransactionType, TxnData},
         Transaction as TransactionPB, TransactionInfo, TransactionSizeInfo,
+        transaction::{TransactionType, TxnData},
     },
     utils::{
         convert::standardize_address,
@@ -303,22 +303,30 @@ impl Transaction {
                     wsc_detail,
                 )
             },
-            TxnData::BlockEpilogue(_) => (
-                Self::from_transaction_info_with_data(
-                    transaction_info,
-                    None,
-                    None,
+            TxnData::BlockEpilogue(_) => {
+                let (wsc, wsc_detail) = WriteSetChangeModel::from_write_set_changes(
+                    &transaction_info.changes,
                     txn_version,
-                    transaction_type,
-                    0,
                     block_height,
-                    epoch,
                     block_timestamp,
-                    txn_size_info,
-                ),
-                vec![],
-                vec![],
-            ),
+                );
+                (
+                    Self::from_transaction_info_with_data(
+                        transaction_info,
+                        None,
+                        None,
+                        txn_version,
+                        transaction_type,
+                        0,
+                        block_height,
+                        epoch,
+                        block_timestamp,
+                        txn_size_info,
+                    ),
+                    wsc,
+                    wsc_detail,
+                )
+            },
         }
     }
 

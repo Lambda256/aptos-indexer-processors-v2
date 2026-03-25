@@ -49,7 +49,7 @@ mod sdk_fungible_asset_processor_tests {
         diff_test_helper::fungible_asset_processor::load_data,
         sdk_tests::{
             fungible_asset_processor_tests::setup_fa_processor_config,
-            test_helpers::{run_processor_test, validate_json, DEFAULT_OUTPUT_FOLDER},
+            test_helpers::{DEFAULT_OUTPUT_FOLDER, run_processor_test, validate_json},
         },
     };
     use aptos_indexer_processor_sdk::testing_framework::{
@@ -58,6 +58,10 @@ mod sdk_fungible_asset_processor_tests {
         sdk_test_context::SdkTestContext,
     };
     use aptos_indexer_test_transactions::json_transactions::generated_transactions::{
+        IMPORTED_MAINNET_TXNS_255894550_STORAGE_REFUND,
+        IMPORTED_MAINNET_TXNS_508365567_FA_V1_EVENTS,
+        IMPORTED_MAINNET_TXNS_550582915_MULTIPLE_TRANSFER_EVENT,
+        IMPORTED_MAINNET_TXNS_999929475_COIN_AND_FA_TRANSFERS,
         IMPORTED_MAINNET_TXNS_1680592683_FA_MIGRATION_COIN_INFO,
         IMPORTED_MAINNET_TXNS_1737056775_COIN_TRANSFER_BURN_EVENT,
         IMPORTED_MAINNET_TXNS_1957950162_FA_MIGRATION_V2_STORE_ONLY,
@@ -66,18 +70,16 @@ mod sdk_fungible_asset_processor_tests {
         IMPORTED_MAINNET_TXNS_2308283617_ASSET_TYPE_V1_NULL_2,
         IMPORTED_MAINNET_TXNS_2424873868_FA_SECONDARY_STORE_EXISTS_OBJECT_CORE_DELETED,
         IMPORTED_MAINNET_TXNS_2448304257_COINSTORE_DELETION_EVENT,
-        IMPORTED_MAINNET_TXNS_255894550_STORAGE_REFUND,
         IMPORTED_MAINNET_TXNS_2662373625_FA_SECONDARY_STORE_BURNT_WITH_DELETION_EVENT,
+        IMPORTED_MAINNET_TXNS_2953383999_FA_SECONDARY_STORE_DELETION,
         IMPORTED_MAINNET_TXNS_2975888978_FA_SECONDARY_STORE_BURNT_OBJECT_STILL_EXISTS,
-        IMPORTED_MAINNET_TXNS_508365567_FA_V1_EVENTS,
-        IMPORTED_MAINNET_TXNS_550582915_MULTIPLE_TRANSFER_EVENT,
-        IMPORTED_MAINNET_TXNS_999929475_COIN_AND_FA_TRANSFERS,
+        IMPORTED_TESTNET_TXNS_646928741_NO_EVENTS,
         IMPORTED_TESTNET_TXNS_1200394037_FA_V2_FROZEN_EVENT,
         IMPORTED_TESTNET_TXNS_2646510387_CONCURRENT_FA,
         IMPORTED_TESTNET_TXNS_4462417704_SECONDARY_STORE_BURNT,
         IMPORTED_TESTNET_TXNS_5523474016_VALIDATOR_TXN,
         IMPORTED_TESTNET_TXNS_5979639459_COIN_REGISTER,
-        IMPORTED_TESTNET_TXNS_5992795934_FA_ACTIVITIES, IMPORTED_TESTNET_TXNS_646928741_NO_EVENTS,
+        IMPORTED_TESTNET_TXNS_5992795934_FA_ACTIVITIES,
         IMPORTED_TESTNET_TXNS_6643353707_FA_TRANSFER_EVENTS_V2,
         IMPORTED_TESTNET_TXNS_6643353877_FA_TRANSFER_2,
     };
@@ -350,6 +352,15 @@ mod sdk_fungible_asset_processor_tests {
         process_single_batch_txns(
             &[IMPORTED_MAINNET_TXNS_2424873868_FA_SECONDARY_STORE_EXISTS_OBJECT_CORE_DELETED],
             Some("fa_store_exists_object_core_deleted".to_string()),
+        )
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn test_fungible_asset_processor_fa_secondary_store_deletion() {
+        process_single_batch_txns(
+            &[IMPORTED_MAINNET_TXNS_2953383999_FA_SECONDARY_STORE_DELETION],
+            Some("fa_secondary_store_deletion".to_string()),
         )
         .await;
     }
