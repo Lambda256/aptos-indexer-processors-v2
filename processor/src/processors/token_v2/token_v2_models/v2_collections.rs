@@ -126,7 +126,7 @@ impl CollectionV2 {
                 if let Some(supply) = concurrent_supply {
                     (current_supply, max_supply, total_minted_v2) = (
                         supply.current_supply.value.clone(),
-                        if supply.current_supply.max_value == u64::MAX.into() {
+                        if supply.current_supply.max_value == u64::MAX {
                             None
                         } else {
                             Some(supply.current_supply.max_value.clone())
@@ -249,10 +249,10 @@ impl CollectionV2 {
                             Ok(ca) => ca,
                             Err(_) => {
                                 tracing::warn!(
-                                        transaction_version = txn_version,
-                                        lookup_key = &table_handle,
-                                        "Failed to get collection creator for table handle {table_handle}, txn version {txn_version}. You probably should backfill db."
-                                    );
+                                    transaction_version = txn_version,
+                                    lookup_key = &table_handle,
+                                    "Failed to get collection creator for table handle {table_handle}, txn version {txn_version}. You probably should backfill db."
+                                );
                                 return Ok(None);
                             },
                         }

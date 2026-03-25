@@ -5,21 +5,21 @@ use crate::{
         signatures::PostgresSignature, user_transactions::PostgresUserTransaction,
     },
     schema,
-    utils::table_flags::{filter_data, TableFlags},
+    utils::table_flags::{TableFlags, filter_data},
 };
 use ahash::AHashMap;
 use anyhow::Result;
 use aptos_indexer_processor_sdk::{
-    postgres::utils::database::{execute_in_chunks, get_config_table_chunk_size, ArcDbPool},
-    traits::{async_step::AsyncRunType, AsyncStep, NamedStep, Processable},
+    postgres::utils::database::{ArcDbPool, execute_in_chunks, get_config_table_chunk_size},
+    traits::{AsyncStep, NamedStep, Processable, async_step::AsyncRunType},
     types::transaction_context::TransactionContext,
     utils::errors::ProcessorError,
 };
 use async_trait::async_trait;
 use diesel::{
-    pg::{upsert::excluded, Pg},
-    query_builder::QueryFragment,
     ExpressionMethods,
+    pg::{Pg, upsert::excluded},
+    query_builder::QueryFragment,
 };
 
 pub struct UserTransactionStorer
@@ -129,6 +129,11 @@ pub fn insert_signatures_query(
             type_.eq(excluded(type_)),
             any_signature_type.eq(excluded(any_signature_type)),
             public_key_type.eq(excluded(public_key_type)),
+            public_key.eq(excluded(public_key)),
+            threshold.eq(excluded(threshold)),
+            public_key_indices.eq(excluded(public_key_indices)),
+            function_info.eq(excluded(function_info)),
+            signature.eq(excluded(signature)),
             inserted_at.eq(excluded(inserted_at)),
         ))
 }

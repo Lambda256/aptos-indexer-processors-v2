@@ -7,10 +7,10 @@ use super::account_signature_utils::{
 use crate::processors::user_transaction::models::signatures::Signature;
 use aptos_indexer_processor_sdk::{
     aptos_protos::transaction::v1::{
-        account_signature::Type as AccountSignatureTypeEnum,
-        signature::{Signature as SignatureEnum, Type as SignatureTypeEnum},
         Ed25519Signature, FeePayerSignature, MultiAgentSignature, MultiEd25519Signature,
         Signature as SignaturePb, SingleSender,
+        account_signature::Type as AccountSignatureTypeEnum,
+        signature::{Signature as SignatureEnum, Type as SignatureTypeEnum},
     },
     utils::convert::standardize_address,
 };
@@ -116,6 +116,7 @@ pub fn parse_ed25519_signature(
         public_key: format!("0x{}", hex::encode(s.public_key.as_slice())),
         threshold: 1,
         public_key_indices: serde_json::Value::Array(vec![]),
+        function_info: None,
         signature: format!("0x{}", hex::encode(s.signature.as_slice())),
         multi_agent_index,
         multi_sig_index: 0,
@@ -153,6 +154,7 @@ pub fn parse_multi_ed25519_signature(
             public_key_type: None,
             public_key: format!("0x{}", hex::encode(public_key.as_slice())),
             threshold: s.threshold as i64,
+            function_info: None,
             signature: format!("0x{}", hex::encode(signature.as_slice())),
             public_key_indices: serde_json::Value::Array(
                 public_key_indices
